@@ -1,0 +1,4 @@
+let a: int = 10;
+let b: int = 200;
+let c: int = a + b * 5;
+print(c);
