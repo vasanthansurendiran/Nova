@@ -1,4 +1,32 @@
-let a: int = 10;
-let b: int = 200;
-let c: int = a + b * 5;
-print(c);
+let x = 10
+let y: float = 5.5
+
+let list[10]: int
+list[0] = 100
+
+if (x >= 5) {
+    let z: int = 20
+    print(z)
+}
+
+for i in 0..3 {
+    print(i)
+}
+
+while (y < 8.0) {
+    y = y + 1.0
+}
+
+
+// 2. Inline Array Initialization & Type Inference
+let lists[3] = [100, 200, x + 300]
+
+// 3. No Semicolons needed for assignments or prints
+list[0] = 999
+print(list[0])
+
+print(y)
+
+print(lists[0])
+print(lists[1])
+print(lists[2])
