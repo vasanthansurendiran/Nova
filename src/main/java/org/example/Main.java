@@ -17,6 +17,8 @@ public class Main {
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         NovaParser parser = new NovaParser(tokens);
 
+
+
         ParseTree tree = parser.program();
 
         System.out.println("\n--- PARSE TREE (AST) ---");

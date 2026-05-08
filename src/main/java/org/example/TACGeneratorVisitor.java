@@ -4,6 +4,9 @@ import java.util.*;
 
 public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
 
+    // The Name Mangling Prefix to prevent C-level namespace collisions
+    public static final String PREFIX = "nova_";
+
     public static class Symbol {
         public String name, type;
         public int scopeLevel;
@@ -25,12 +28,17 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
     private String newTemp() { return "t" + (tempCounter++); }
     private String newLabel() { return "L" + (labelCounter++); }
 
+    // Helper to strip the prefix for user-facing error messages
+    private String cleanName(String mangledName) {
+        return mangledName.replace(PREFIX, "");
+    }
+
     // --- SECURITY PROTOCOL: SEMANTIC ERROR CHECKING ---
     private String getVarType(String id) {
         for (int i = scopes.size() - 1; i >= 0; i--) {
             if (scopes.get(i).containsKey(id)) return scopes.get(i).get(id);
         }
-        System.err.println("SEMANTIC ERROR: Undefined variable '" + id + "'.");
+        System.err.println("SEMANTIC ERROR: Undefined variable '" + cleanName(id) + "'.");
         System.exit(1);
         return null;
     }
@@ -68,13 +76,13 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
         return null;
     }
 
-    // --- DECLARATIONS (MODERNIZED) ---
+    // --- DECLARATIONS (MODERNIZED & MANGLED) ---
     @Override
     public String visitVarDecl(NovaParser.VarDeclContext ctx) {
-        String id = ctx.ID().getText();
+        String id = PREFIX + ctx.ID().getText();
 
         if (scopes.peek().containsKey(id)) {
-            System.err.println("SEMANTIC ERROR: Variable '" + id + "' is already defined in this scope.");
+            System.err.println("SEMANTIC ERROR: Variable '" + cleanName(id) + "' is already defined in this scope.");
             System.exit(1);
         }
 
@@ -90,11 +98,11 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
         if (ctx.type() != null) {
             declaredType = ctx.type().getText();
             if (exprType != null) {
-                enforceType(declaredType, exprType, "Type mismatch in declaration for '" + id + "'");
+                enforceType(declaredType, exprType, "Type mismatch in declaration for '" + cleanName(id) + "'");
             }
         } else {
             if (exprType == null || exprType.equals("unknown")) {
-                System.err.println("SEMANTIC ERROR: Cannot infer type for '" + id + "'. You must provide an initial value or an explicit type.");
+                System.err.println("SEMANTIC ERROR: Cannot infer type for '" + cleanName(id) + "'. You must provide an initial value or an explicit type.");
                 System.exit(1);
                 return null;
             }
@@ -112,7 +120,7 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
 
     @Override
     public String visitArrayDecl(NovaParser.ArrayDeclContext ctx) {
-        String id = ctx.ID().getText();
+        String id = PREFIX + ctx.ID().getText();
         String sizeStr = ctx.NUMBER().getText();
         int size = Integer.parseInt(sizeStr);
         String baseType;
@@ -123,7 +131,7 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
             if (!ctx.expr().isEmpty()) {
                 baseType = resolveType(visit(ctx.expr(0)));
             } else {
-                System.err.println("SEMANTIC ERROR: Cannot infer type for array '" + id + "'. You must provide values or an explicit type.");
+                System.err.println("SEMANTIC ERROR: Cannot infer type for array '" + cleanName(id) + "'. You must provide values or an explicit type.");
                 System.exit(1);
                 return null;
             }
@@ -137,13 +145,13 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
 
         if (!ctx.expr().isEmpty()) {
             if (ctx.expr().size() > size) {
-                System.err.println("SEMANTIC ERROR: Array '" + id + "' is size " + size + " but you provided " + ctx.expr().size() + " values.");
+                System.err.println("SEMANTIC ERROR: Array '" + cleanName(id) + "' is size " + size + " but you provided " + ctx.expr().size() + " values.");
                 System.exit(1);
             }
             for (int i = 0; i < ctx.expr().size(); i++) {
                 String val = visit(ctx.expr(i));
                 String valType = resolveType(val);
-                enforceType(baseType, valType, "Type mismatch in array initialization for '" + id + "' at index " + i);
+                enforceType(baseType, valType, "Type mismatch in array initialization for '" + cleanName(id) + "' at index " + i);
                 tacList.add(new TACInstruction(id + "[" + i + "]", val, "=", ""));
             }
         }
@@ -153,29 +161,29 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
     // --- ASSIGNMENTS & ARRAYS ---
     @Override
     public String visitAssignment(NovaParser.AssignmentContext ctx) {
-        String id = ctx.ID().getText();
+        String id = PREFIX + ctx.ID().getText();
         String declaredType = getVarType(id);
         String exprResult = visit(ctx.expr());
         String exprType = resolveType(exprResult);
 
-        enforceType(declaredType, exprType, "Type mismatch in assignment for '" + id + "'");
+        enforceType(declaredType, exprType, "Type mismatch in assignment for '" + cleanName(id) + "'");
         tacList.add(new TACInstruction(id, exprResult, "=", ""));
         return null;
     }
 
     @Override
     public String visitArrayAssign(NovaParser.ArrayAssignContext ctx) {
-        String id = ctx.ID().getText();
+        String id = PREFIX + ctx.ID().getText();
         String arrayType = getVarType(id);
         String baseType = arrayType.replace("[]", "");
 
         String index = visit(ctx.expr(0));
         String indexType = resolveType(index);
-        enforceType("int", indexType, "Array index for '" + id + "' must be an integer");
+        enforceType("int", indexType, "Array index for '" + cleanName(id) + "' must be an integer");
 
         String val = visit(ctx.expr(1));
         String valType = resolveType(val);
-        enforceType(baseType, valType, "Type mismatch when assigning to array '" + id + "'");
+        enforceType(baseType, valType, "Type mismatch when assigning to array '" + cleanName(id) + "'");
 
         tacList.add(new TACInstruction(id + "[" + index + "]", val, "=", ""));
         return null;
@@ -183,12 +191,12 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
 
     @Override
     public String visitArrayAccessExpr(NovaParser.ArrayAccessExprContext ctx) {
-        String id = ctx.ID().getText();
+        String id = PREFIX + ctx.ID().getText();
         String arrayType = getVarType(id);
 
         String index = visit(ctx.index);
         String indexType = resolveType(index);
-        enforceType("int", indexType, "Array index for '" + id + "' must be an integer");
+        enforceType("int", indexType, "Array index for '" + cleanName(id) + "' must be an integer");
 
         String temp = newTemp();
         tacList.add(new TACInstruction(temp, id + "[" + index + "]", "=", ""));
@@ -239,7 +247,7 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
 
     @Override
     public String visitForStmt(NovaParser.ForStmtContext ctx) {
-        String iterId = ctx.ID().getText();
+        String iterId = PREFIX + ctx.ID().getText();
         String startExpr = visit(ctx.expr(0));
         enforceType("int", resolveType(startExpr), "'for' loop start boundary must be an integer");
 
@@ -314,9 +322,11 @@ public class TACGeneratorVisitor extends NovaBaseVisitor<String> {
     // --- BASICS ---
     @Override
     public String visitIdExpr(NovaParser.IdExprContext ctx) {
-        getVarType(ctx.ID().getText());
-        return ctx.ID().getText();
+        String id = PREFIX + ctx.ID().getText();
+        getVarType(id);
+        return id;
     }
+
     @Override
     public String visitNumberExpr(NovaParser.NumberExprContext ctx) { return ctx.NUMBER().getText(); }
     @Override
